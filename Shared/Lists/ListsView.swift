@@ -91,8 +91,10 @@ struct ListsView: View {
   private func row(_ item: ListOverview) -> some View {
     let preview = item.list.words.prefix(6).map { $0.display.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: L("wordLists.row.separator"))
     let rest = max(0, item.list.words.count - 6)
+    // A list of a followed official pack is not edited (packFollowed); it is practised or copied.
+    let followed = item.list.isFollowed
     return HStack(spacing: 16) {
-      Button { app.navigate(.editList(item.list.id)) } label: {
+      Button { followed ? app.practice(listId: item.list.id) : app.navigate(.editList(item.list.id)) } label: {
         VStack(alignment: .leading, spacing: 3) {
           Text(item.list.name).font(.system(size: 16, weight: .medium)).foregroundStyle(Palette.foreground).lineLimit(2)
           Text(rest > 0 ? L("wordLists.row.more", preview, rest) : preview).font(.system(size: 14)).foregroundStyle(Palette.mutedForeground).lineLimit(1)
@@ -115,9 +117,13 @@ struct ListsView: View {
         .buttonStyle(.typle(.ghost, size: .icon))
         .foregroundStyle(Palette.mutedForeground)
         .accessibilityLabel(L("wordLists.row.practiceList", item.list.name))
-      Button { app.navigate(.editList(item.list.id)) } label: { Label(L("wordLists.row.edit"), systemImage: "pencil") }
-        .buttonStyle(.typle(.outline, size: .lg))
-        .accessibilityLabel(L("wordLists.row.editList", item.list.name))
+      if followed {
+        Text(L("wordLists.row.official")).font(.system(size: 13, weight: .medium)).foregroundStyle(Palette.mutedForeground)
+      } else {
+        Button { app.navigate(.editList(item.list.id)) } label: { Label(L("wordLists.row.edit"), systemImage: "pencil") }
+          .buttonStyle(.typle(.outline, size: .lg))
+          .accessibilityLabel(L("wordLists.row.editList", item.list.name))
+      }
       Menu { menu(item.list) } label: {
         Image(systemName: "ellipsis").font(.system(size: 15)).frame(width: 36, height: 36).contentShape(Rectangle())
       }
@@ -146,8 +152,10 @@ struct ListsView: View {
     #endif
     Button { duplicate(list) } label: { Label(L("wordLists.row.copy"), systemImage: "plus.square.on.square") }
       .disabled(app.lists.count >= maxLists)
-    Divider()
-    Button(role: .destructive) { deleting = list } label: { Label(L("wordLists.row.delete"), systemImage: "trash") }
+    if !list.isFollowed {
+      Divider()
+      Button(role: .destructive) { deleting = list } label: { Label(L("wordLists.row.delete"), systemImage: "trash") }
+    }
   }
 
   private func duplicate(_ list: WordList) {

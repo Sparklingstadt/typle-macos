@@ -2,11 +2,14 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const { text } = require('../scripts/catalog.cjs')
 
 // The app is built on macOS only; these checks of its text run anywhere with `node --test tests/`. Shared/ holds the
 // text the Mac shares with the iPad app of Sparklingstadt/typle-r, and Typle/Resources/*/Mac.strings replaces it where
 // that names the iPad.
 const root = path.join(__dirname, '..')
+// TYPLE_R, a checkout of typle-r, also compares the official packs with the web app's.
+const typleR = process.env.TYPLE_R ? path.resolve(process.env.TYPLE_R) : undefined
 
 function swiftFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
@@ -70,4 +73,9 @@ test('the Mac app builds its own sources and the shared rules', () => {
   // The Mac's text field is the only one: the iPad's UITextField is not in Shared/.
   assert.equal(fs.existsSync(path.join(root, 'Shared/Practice/PracticeTextField.swift')), false)
   assert.ok(fs.existsSync(path.join(root, 'Typle/Practice/PracticeTextField.swift')))
+})
+
+test('the Mac app bundles the official packs of the web app', { skip: !typleR && 'TYPLE_R is not set' }, () => {
+  assert.equal(fs.readFileSync(path.join(root, 'TypleCore/Sources/TypleCore/Resources/catalog.json'), 'utf8'), text(typleR),
+    'run node scripts/catalog.cjs <typle-r> again')
 })

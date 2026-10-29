@@ -357,6 +357,7 @@
 "wordLists.row.practiced" = "Practiced %1$ld times · Last: %2$@";
 "wordLists.row.practiceList" = "Practice %@";
 "wordLists.row.edit" = "Edit";
+"wordLists.row.official" = "Official";
 "wordLists.row.editList" = "Edit %@";
 "wordLists.row.moreFor" = "More actions for %@";
 "wordLists.row.practiceThis" = "Practice this list";
@@ -434,6 +435,7 @@
 "errors.savedDataUnreadable" = "The format of the saved data cannot be read.";
 "errors.savedDataCorrupted" = "The saved data is corrupted. The original data has not been changed.";
 "errors.listDeleted" = "This word list has been deleted. Please reopen this page.";
+"errors.packFollowed" = "Lists of official packs cannot be edited or deleted. Copy the list to edit it as your own.";
 "errors.listLimit" = "You can save up to {max} word lists.";
 "errors.importFileType" = "Choose a CSV or TSV file.";
 "errors.importFileEncoding" = "Choose a file saved in UTF-8.";

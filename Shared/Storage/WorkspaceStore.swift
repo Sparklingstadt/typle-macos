@@ -91,7 +91,7 @@ final class LocalWorkspaceStore: WorkspaceStore {
   func deleteList(id: String) async throws -> WorkspaceDocument {
     try change { document in
       var document = document
-      document.lists.removeAll { $0.id == id }
+      document.lists = try TypleCore.deleteList(document.lists, id: id)
       return document
     }
   }

@@ -370,10 +370,12 @@ struct ListEditorView: View {
       return
     }
     let list = WordList(id: original?.id ?? randomId(), name: name,
-                        words: kept.map { Word(display: $0.word.display, input: $0.word.input.isEmpty ? $0.word.display : $0.word.input, annotation: $0.word.annotation) },
+                        words: kept.map { Word(display: $0.word.display, input: $0.word.input.isEmpty ? $0.word.display : $0.word.input, annotation: $0.word.annotation,
+                                                   inputType: $0.word.inputType) },
                         records: original?.records ?? [], createdAt: original?.createdAt ?? isoString(Date()),
                         // The iPad and Mac editors do not edit these yet, so they stay as saved.
-                        category: original?.category, tags: original?.tags, group: original?.group, levels: original?.levels)
+                        category: original?.category, tags: original?.tags, group: original?.group, levels: original?.levels,
+                        packId: original?.packId)
     saving = true
     Task {
       do {

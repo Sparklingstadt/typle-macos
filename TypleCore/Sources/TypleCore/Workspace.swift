@@ -1,41 +1,13 @@
 import Foundation
 
-// The lists an account starts with (src/plugins/packs). They are shown until the first save, which keeps them as the
-// account's own lists. The JSON files are copies; tests/iosPacks.test.cjs checks they match.
-private struct PackList: Decodable {
-  var id: String?
-  var name: String
-  var category: String?
-  var tags: [String]?
-  var group: String?
-  var levels: [String]?
-  var words: [Word]
-  var records: [StoredRecord]?
-  var createdAt: String
-}
-
+/// The lists this device starts with: those of the official packs (catalog.json), each with its pack's category and
+/// tags. They are shown until the first save, which keeps them as this device's own lists.
 public func initialLists() -> [WordList] {
-  func load(_ name: String) -> Data {
-    guard let url = Bundle.module.url(forResource: name, withExtension: "json"), let data = try? Data(contentsOf: url) else {
-      fatalError("Missing bundled pack \(name).json")
+  officialPacks().flatMap { entry in
+    entry.lists.map { item in
+      WordList(id: item.id, name: item.name, words: item.words, createdAt: item.createdAt,
+               category: entry.pack.category, tags: entry.pack.tags, levels: (item.levels ?? []).isEmpty ? nil : item.levels)
     }
-    return data
-  }
-  do {
-    let samples = try JSONDecoder().decode([PackList].self, from: load("samples"))
-    let countries = try JSONDecoder().decode([PackList].self, from: load("countries"))
-    let commands = try JSONDecoder().decode([PackList].self, from: load("commands"))
-    let lists: [WordList] = samples.enumerated().map { index, list in
-      WordList(id: "sample-\(index + 1)", name: list.name, words: list.words, records: [], createdAt: list.createdAt,
-               category: list.category, tags: list.tags, group: list.group, levels: list.levels)
-    }
-    // Each list of countries.json and commands.json names its own id (tests/commands.test.cjs).
-    return lists + (countries + commands).map { list in
-      WordList(id: list.id ?? list.name, name: list.name, words: list.words, records: list.records ?? [], createdAt: list.createdAt,
-               category: list.category, tags: list.tags, group: list.group, levels: list.levels)
-    }
-  } catch {
-    fatalError("Unreadable bundled pack: \(error)")
   }
 }
 

@@ -63,13 +63,20 @@ public func validateLists(_ lists: [WordList]) throws {
 
 /// Saves a new or edited list. Whitespace can be meaningful in typing strings and annotations, so only the name is
 /// trimmed. The editor's copy of a list knows nothing of its records, so those stay as saved.
+/// A list's name is its own within its pack (all of this device's lists, which have none, are one). A list of a followed
+/// official pack cannot be changed, as in the web app.
 public func saveList(_ lists: [WordList], _ list: WordList, editing: Bool) throws -> [WordList] {
-  if editing && !lists.contains(where: { $0.id == list.id }) { throw TypleError("listDeleted") }
-  try validateList(list, others: lists.filter { $0.id != list.id })
+  let saved = lists.first { $0.id == list.id }
+  if editing && saved == nil { throw TypleError("listDeleted") }
+  if saved?.isFollowed == true { throw TypleError("packFollowed") }
+  let packId = saved?.packId ?? list.packId
+  try validateList(list, others: lists.filter { $0.id != list.id && $0.packId == packId })
   var normalized = list
   normalized.name = list.name.trimmed
   (normalized.category, normalized.tags) = normalizeLabels(category: list.category, tags: list.tags)
-  if lists.contains(where: { $0.id == list.id }) {
+  normalized.packId = packId
+  normalized.origin = nil
+  if saved != nil {
     return lists.map { item in
       guard item.id == list.id else { return item }
       var kept = normalized
@@ -127,6 +134,13 @@ public func matchesQuery(_ list: WordList, _ query: String) -> Bool {
   return list.name.lowercased().contains(needle) || (list.category?.lowercased().contains(needle) ?? false) ||
     (list.tags ?? []).contains { $0.lowercased().contains(needle) } ||
     list.words.contains { $0.display.lowercased().contains(needle) || $0.input.lowercased().contains(needle) }
+}
+
+/// Deletes a list with its records. A list of a followed official pack goes only with its pack, which the web app
+/// unfollows.
+public func deleteList(_ lists: [WordList], id: String) throws -> [WordList] {
+  if lists.first(where: { $0.id == id })?.isFollowed == true { throw TypleError("packFollowed") }
+  return lists.filter { $0.id != id }
 }
 
 /// The records a list's best is taken from: runs at its current word count.

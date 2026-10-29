@@ -179,8 +179,8 @@ final class WordListTests: XCTestCase {
     let copy = try duplicateList(saved, id: "x", copyId: "z", suffix: { _ in "（コピー）" }).copy
     XCTAssertEqual(copy.tags, ["Go"])
     XCTAssertTrue(matchesQuery(saved[0], "語学"))
-    // Every initial list is labeled (since typle-r v0.101.1).
-    XCTAssertEqual(initialLists().filter { $0.category != nil && !($0.tags ?? []).isEmpty }.count, 67)
+    // Every initial list has the labels of its official pack (since typle-r v0.101.1).
+    XCTAssertEqual(initialLists().filter { $0.category != nil && !($0.tags ?? []).isEmpty }.count, 86)
     XCTAssertThrowsError(try validateLists([WordList(id: "a", name: "A", words: words, createdAt: "x", tags: [String(repeating: "t", count: 51)])]))
   }
 
@@ -193,7 +193,9 @@ final class WordListTests: XCTestCase {
     let body = String(decoding: try encodeAccountWorkspace(decoded), as: UTF8.self)
     XCTAssertTrue(body.contains(#""levels":["基本","初級"]"#), body)
     XCTAssertNil(try duplicateList(decoded.document.lists, id: "x", copyId: "z", suffix: { _ in "（コピー）" }).copy.group)
-    XCTAssertEqual(initialLists().filter { $0.group == "Kotlin構文" }.count, 5)
+    // The initial lists come from the official packs, which hold the groups; the levels stay on the lists.
+    XCTAssertEqual(initialLists().filter { $0.group != nil }.count, 0)
+    XCTAssertEqual(initialLists().filter { $0.levels != nil }.count, 68)
   }
 
   func testWorkspaceFileRoundTrip() throws {
@@ -226,10 +228,16 @@ final class WordListTests: XCTestCase {
     XCTAssertEqual(json["revision"] as? Int, 4)
     XCTAssertEqual(try decodeAccountWorkspace(body), decoded)
 
-    // An account that has saved nothing shows the starting lists, which its first save keeps.
+    // An account that has saved nothing follows every official pack, which its first save keeps, without their words.
     let empty = try decodeAccountWorkspace(Data(#"{"lists":[],"devices":[],"revision":0,"accountId":"github:1"}"#.utf8))
-    XCTAssertEqual(empty.document.lists, initialLists())
+    XCTAssertEqual(empty.document.packs?.count, officialPacks().count)
+    XCTAssertEqual(empty.document.lists.map(\.origin?.listId), initialLists().map(\.id))
+    XCTAssertEqual(empty.document.lists.map(\.words), initialLists().map(\.words))
+    XCTAssertTrue(empty.document.lists.allSatisfy(\.isFollowed))
     XCTAssertEqual(empty.revision, 0)
+    let first = try XCTUnwrap(JSONSerialization.jsonObject(with: try encodeAccountWorkspace(empty)) as? [String: Any])
+    XCTAssertEqual((first["packs"] as? [Any])?.count, 40)
+    XCTAssertTrue((first["lists"] as? [[String: Any]])?.allSatisfy { ($0["words"] as? [Any])?.isEmpty == true } ?? false)
 
     for invalid in ["{}", #"{"lists":[],"devices":[],"revision":-1,"accountId":"github:1"}"#,
                     #"{"lists":[],"devices":[],"revision":1,"accountId":""}"#, #"{"error":"loginRequired"}"#] {
@@ -244,8 +252,8 @@ final class WordListTests: XCTestCase {
     let lists = initialLists()
     // Since v0.85.0 the initial lists are the lists of the sparklingstadt account, in its order.
     XCTAssertEqual(lists.map(\.id).prefix(2), ["8f3cf116-1f9f-4579-a071-e600094b104d", "ef974a4b-3c7a-4eeb-9979-6721a0a1c81a"])
-    XCTAssertEqual(lists.count, 67)
-    XCTAssertEqual([lists[9].id, lists[10].id, lists.last?.id], ["arch-linux", "arch-linux-beginner", "sql-server-tsql-syntax-advanced"])
+    XCTAssertEqual(lists.count, 86)
+    XCTAssertEqual([lists[9].id, lists[10].id, lists.last?.id], ["arch-linux", "arch-linux-beginner", "chinese-hsk6-words-2"])
     XCTAssertNoThrow(try validateLists(lists))
   }
 }
@@ -294,5 +302,105 @@ final class WordFileTests: XCTestCase {
     XCTAssertEqual(try parseWordFile(encodeWordCsv(words), format: .csv), words)
     XCTAssertEqual(WordFileFormat(fileName: "Words.TSV"), .tsv)
     XCTAssertNil(WordFileFormat(fileName: "words.txt"))
+  }
+}
+
+final class PackTests: XCTestCase {
+  private let word = #"{"display":"a","input":"a","annotation":""}"#
+
+  /// An answer of /api/workspace since typle-r v2.1.0: the followed pack Vimコマンド（2） (pack-vim-beginner) with only
+  /// one of its lists, saved without words, and a pack of the account's own with two lists.
+  private func answer(extraPacks: String = "") -> Data {
+    Data(#"""
+    {"lists":[
+      {"id":"mine-1","name":"A","packId":"p-own","createdAt":"2026-01-01","words":[\#(word)],"records":[]},
+      {"id":"f:vim-intermediate","name":"old","packId":"p-vim","origin":{"listId":"vim-intermediate"},"createdAt":"2026-01-01","words":[],
+       "records":[{"id":"r","time":5,"date":"2026-01-02T00:00:00.000Z"}]},
+      {"id":"mine-2","name":"B","packId":"p-own","createdAt":"2026-01-01","words":[{"display":"b","input":"b","annotation":"","input_type":"code"}],"records":[]}
+    ],"packs":[
+      {"id":"p-own","name":"Mine","createdAt":"2026-01-01","shared":true},
+      {"id":"p-vim","name":"Vim","createdAt":"2026-01-01","origin":{"catalogId":"pack-vim-beginner","version":1,"followed":true}}\#(extraPacks)
+    ],"devices":[],"interests":["language"],"revision":3,"accountId":"github:1"}
+    """#.utf8)
+  }
+
+  func testFollowedPacksTakeTheirWordsFromTheCatalog() throws {
+    let decoded = try decodeAccountWorkspace(answer())
+    let lists = decoded.document.lists
+    // The followed pack's lists are the official ones, where its first list was; the one saved keeps its id and records.
+    XCTAssertEqual(lists.map(\.id), ["mine-1", "p-vim:vim-beginner", "f:vim-intermediate", "p-vim:vim-advanced", "mine-2"])
+    XCTAssertEqual(lists.map(\.words.count), [1, 38, 37, 37, 1])
+    XCTAssertEqual(lists[2].name, "Vimコマンド（中級）")
+    XCTAssertEqual(lists[2].levels, ["中級"])
+    XCTAssertEqual(lists[2].records.map(\.id), ["r"])
+    XCTAssertEqual(lists.map(\.isFollowed), [false, true, true, true, false])
+    XCTAssertEqual(lists[4].words[0].inputType, "code")
+    XCTAssertEqual(decoded.document.packs?.map(\.id), ["p-own", "p-vim"])
+
+    // A save sends the packs as they were read, with the followed lists without their words.
+    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try encodeAccountWorkspace(decoded)) as? [String: Any])
+    let packs = try XCTUnwrap(body["packs"] as? [[String: Any]])
+    XCTAssertEqual(packs.map { $0["id"] as? String }, ["p-own", "p-vim"])
+    XCTAssertEqual(packs[0]["shared"] as? Bool, true)
+    XCTAssertEqual((packs[1]["origin"] as? [String: Any])?["followed"] as? Bool, true)
+    XCTAssertEqual(packs[1]["category"] as? String, "プログラミング")
+    let sent = try XCTUnwrap(body["lists"] as? [[String: Any]])
+    XCTAssertEqual(sent.map { ($0["words"] as? [Any])?.count }, [1, 0, 0, 0, 1])
+    XCTAssertEqual(sent.map { $0["packId"] as? String }, ["p-own", "p-vim", "p-vim", "p-vim", "p-own"])
+    XCTAssertEqual(((sent[4]["words"] as? [[String: Any]])?[0])?["input_type"] as? String, "code")
+    XCTAssertFalse(sent.contains { $0["group"] != nil || $0["category"] != nil || $0["tags"] != nil })
+  }
+
+  func testCopiesBeforeV0_98AreRemoved() throws {
+    let unfollowed = #",{"id":"p-old","name":"Old","createdAt":"2026-01-01","origin":{"catalogId":"pack-vim","version":1}}"#
+    let official = #",{"id":"pack-vim","name":"Vimコマンド","createdAt":"2026-01-01"}"#
+    let decoded = try decodeAccountWorkspace(answer(extraPacks: unfollowed + official))
+    XCTAssertEqual(decoded.document.packs?.map(\.id), ["p-own", "p-vim"])
+  }
+
+  func testFollowedListsAreNotChanged() throws {
+    let lists = try decodeAccountWorkspace(answer()).document.lists
+    var edited = lists[1]
+    edited.name = "Mine now"
+    XCTAssertThrowsError(try saveList(lists, edited, editing: true)) { XCTAssertEqual($0 as? TypleError, TypleError("packFollowed")) }
+    XCTAssertThrowsError(try deleteList(lists, id: lists[1].id)) { XCTAssertEqual($0 as? TypleError, TypleError("packFollowed")) }
+    XCTAssertEqual(try deleteList(lists, id: "mine-1").map(\.id), lists.dropFirst().map(\.id))
+    // A copy is a list of the account's own, which a save puts in a pack of its own.
+    let copy = try duplicateList(lists, id: lists[1].id, copyId: "c", suffix: { _ in "（コピー）" }).copy
+    XCTAssertNil(copy.packId)
+    XCTAssertFalse(copy.isFollowed)
+    XCTAssertEqual(copy.words.count, 38)
+  }
+
+  func testNewListsGetAPackOfTheirOwn() throws {
+    var decoded = try decodeAccountWorkspace(answer())
+    // A name is checked only against the lists of the same pack.
+    var lists = try saveList(decoded.document.lists, WordList(id: "new", name: "mine", words: [Word(display: "x", input: "x")], createdAt: "2026-02-01"), editing: false)
+    lists = try saveList(lists, WordList(id: "new-2", name: "A", words: [Word(display: "x", input: "x")], createdAt: "2026-02-01"), editing: false)
+    var renamed = lists[0]
+    renamed.name = "B"
+    XCTAssertThrowsError(try saveList(lists, renamed, editing: true)) { XCTAssertEqual($0 as? TypleError, TypleError("listNameDuplicate")) }
+    // The pack without lists is not sent: a save may not have one.
+    lists = try deleteList(lists, id: "mine-1")
+    lists = try deleteList(lists, id: "mine-2")
+    decoded.document.lists = lists
+    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try encodeAccountWorkspace(decoded)) as? [String: Any])
+    let packs = try XCTUnwrap(body["packs"] as? [[String: Any]])
+    XCTAssertEqual(packs.map { $0["id"] as? String }, ["p-vim", "pack-new", "pack-new-2"])
+    XCTAssertEqual(packs.map { $0["name"] as? String }, ["Vim", "mine（2）", "A"])
+    XCTAssertEqual((body["lists"] as? [[String: Any]])?.suffix(2).map { $0["packId"] as? String }, ["pack-new", "pack-new-2"])
+  }
+
+  // An account whose lists were saved before packs is saved as before: the backend makes the packs.
+  func testListsWithoutPacks() throws {
+    let decoded = try decodeAccountWorkspace(Data(#"{"lists":[{"id":"x","name":"X","createdAt":"2026-01-01","words":[\#(word)],"records":[]}],"packs":null,"devices":[],"revision":2,"accountId":"github:1"}"#.utf8))
+    XCTAssertNil(decoded.document.packs)
+    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: try encodeAccountWorkspace(decoded)) as? [String: Any])
+    XCTAssertNil(body["packs"])
+  }
+
+  func testFit() {
+    XCTAssertEqual(fit(String(repeating: "a", count: 199) + " b", "（2）", limit: 200), String(repeating: "a", count: 197) + "（2）")
+    XCTAssertEqual(fit("ab😀", "", limit: 3), "ab")
   }
 }

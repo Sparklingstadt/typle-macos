@@ -57,6 +57,7 @@ Web 版と同じ画面構成・色・部品です。上部バー（ブランド�
 
 - 2つのデータは別々で、切り替えてもコピーしません。
 - アカウントでも、この Mac と同じくすべての操作ができます。変更のたびに、読み込んだときの `revision` を付けてデータ全体を保存します。別の画面で先に保存されていたとき（`409 conflict`）は、最新を読み直して同じ変更をやり直します（3回まで）。
+- アカウントの単語パック（typle-r v0.91.0 から）は画面に出しませんが、読み込んだまま保存し、パックごとに単語リストを並べ替えたりしません。フォロー中の公式パックのリストは、サーバーが単語を空で返すため（typle-r v2.1.0 から）、同梱の公式パックのカタログ（`catalog.json`）から単語を戻して練習できるようにし、保存では単語を送りません。公式パックのリストは Web 版と同じく編集・削除できず（一覧に「公式」と出ます）、複製すると自分のリストとして編集できます。Macで作ったリストは、保存のときにそのリストの名前のパックに入ります。一度も保存していないアカウントは、公式パックをすべてフォローした状態で始まります（Web 版の関心の既定がすべてを選ぶのと同じ）。
 - ログインは「一般」の「GitHub でログイン」で、システムのログイン画面（`ASWebAuthenticationSession`。Safari の GitHub のログインを使えます）が開きます。サーバーには `client=macos` で始め、流れは iPad と同じです（下の「ログインの流れ」）。受け取ったトークンは Mac のキーチェーンにだけ保存し、有効期限は30日です。使っているあいだは自動で延びます。
 - ログアウトするとトークンを消して「この Mac」に戻ります。
 - サーバーの URL は https だけです。http は `localhost`・`127.0.0.1`・`*.local` に限ります。手元の Web 版（`npm run dev`）で試すときは `http://localhost:<ポート>` を入れます。GitHub の OAuth App の callback URL がサーバー（`AUTH_URL`）のものである必要があり、開発用ログインはアプリでは使えません。
@@ -78,7 +79,7 @@ Web 版と同じ GitHub OAuth App でログインし、Cookie の代わりにト
 | 場所 | 内容 |
 |---|---|
 | `Shared/` | typle-r の iPad 版から写した SwiftUI のコード。Mac で違うところは `#if os(macOS)` と `Support/Platform.swift`（ログインの `client`、保存データの名前など）、`Design/Theme.swift` の「The iPad and the Mac」（入力欄・メニュー・シートの見た目）。`#else` の側は iPad のときのもので、Mac のビルドには入りません |
-| `TypleCore/` | 入力判定・記録・ベスト・ランキング・単語リスト・端末・CSV と、最初の単語リスト（Swift Package） |
+| `TypleCore/` | 入力判定・記録・ベスト・ランキング・単語リスト・端末・CSV と、公式パックのカタログ（Swift Package） |
 | `Typle/Practice/PracticeTextField.swift` | 練習欄（AppKit） |
 | `Typle/MacCommands.swift` | メニューバー、CSV の保存、スクリーンショット（Debug ビルドだけ） |
 | `Typle/Resources/` | アイコンと、`Shared/` の文言のうち「iPad」「タップ」を含むものの Mac 版（`Mac.strings`）。ほかの文言は `Shared/Resources` の `Localizable.strings` を使います |
@@ -91,11 +92,22 @@ CI のワークフローはありません。ビルドとサンプルデータ�
 
 ```sh
 node --test tests/            # 文言（Node.js 20 以上）
+TYPLE_R=../typle-r node --test tests/   # 公式パックのカタログも
 cd TypleCore && swift test    # 共通の規則
 ```
 
 - `tests/strings.test.cjs` が、「iPad」「タップ」を含む文言すべてに Mac 版があり、プレースホルダーがそろっているか、コードが使う文言が日本語・英語の両方にあるかを確かめます。
+- `TYPLE_R` に typle-r の手元のフォルダーを指定すると、公式パックのカタログ（`catalog.json`）が typle-r の `src/plugins/packs` から作ったものと同じかも確かめます。指定しなければ、このテストは飛ばします。
 - スクリーンショットは、Debug ビルドを `-TypleDemo YES -TypleSnapshot <ファイル>` で起動すると、ウインドウを PNG で保存して終わります。アプリは App Sandbox の中で動くため、保存先は `~/Library/Containers/io.github.sparklingstadt.typle/Data/tmp/` の下にします。
+
+## 公式パックを Web 版に合わせる
+
+`TypleCore/Sources/TypleCore/Resources/catalog.json` は、typle-r の `src/plugins/packs`（`commands/manifest.json` の順の各リスト）から作る公式パックのカタログです。Web 版の `officialPacks`・Go の `OfficialPacks` と同じパック・リスト・ID になります。直接書き換えず、typle-r で公式のリストが変わったら作り直し、`TYPLE_R` を指定したテストで同じになったことを確かめます。この端末で使う最初の単語リストも、このカタログのリストです。
+
+```sh
+node scripts/catalog.cjs ../typle-r
+TYPLE_R=../typle-r node --test tests/
+```
 
 ## 範囲外
 
